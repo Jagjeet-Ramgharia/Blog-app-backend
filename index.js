@@ -7,11 +7,15 @@ const userRouter = require("./routes/users");
 const postRoute = require("./routes/posts");
 const catRouter = require("./routes/categories");
 const multer = require("multer");
+const cors = require("cors");
+const path = require("path/posix");
 const port = process.env.PORT || 8000;
 
 //middlewares
 dotenv.config();
 app.use(express.json());
+app.use(cors());
+app.use("/images", express.static(path.join(__dirname, "/images")));
 
 //db
 mongoose
