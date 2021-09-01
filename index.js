@@ -48,6 +48,12 @@ app.use("/api/auth", authRoute);
 app.use("/api/users", userRouter);
 app.use("/api/posts", postRoute);
 app.use("/api/categories", catRouter);
+
+//static path to frontend
+app.use(express.static(path.join(__dirname, "/blog/build")));
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "/blog/build", "index.html"));
+});
 //listener
 app.listen(port, () => {
   console.log(`Backend is running at port ${port}`);
