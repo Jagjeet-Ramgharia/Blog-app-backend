@@ -2,8 +2,7 @@ const router = require("express").Router();
 const User = require("../models/Users");
 const bcrypt = require("bcrypt");
 const sgMail = require("@sendgrid/mail");
-const nodemailer = require("nodemailer");
-const sendgrid = require("nodemailer-sendgrid-transport");
+const crypto = require("crypto");
 
 //Register a user
 router.post("/register", async (req, res) => {
@@ -18,9 +17,7 @@ router.post("/register", async (req, res) => {
     });
     const savedUser = await newUser.save();
     res.status(201).json(savedUser);
-    sgMail.setApiKey(
-      "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"
-    );
+    sgMail.setApiKey(process.env.SENDGRID_KEY);
     const msg = {
       to: savedUser.email,
       from: "ramghariajagjeet4281@gmail.com",
@@ -53,6 +50,39 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     res.status(500).json(err);
   }
+});
+
+//reset password
+router.post("/reset-password", async (req, res) => {
+  crypto.randomBytes(32, (err, buffer) => {
+    if (err) {
+      console.log(err);
+    }
+    const token = buffer.toString("hex");
+    const user = User.findOne({ email: req.body.email });
+    !user && res.status(404).json("User dose not exist with the given email.");
+    user.resetToken = token;
+    user.expireToken = Date.now() + 3600000;
+    const result = user.save();
+    sgMail.setApiKey(process.env.SENDGRID_KEY);
+    const msg = {
+      to: result.email,
+      from: "ramghariajagjeet4281@gmail.com",
+      subject: "Reset Password",
+      text: "Follow the given link to reset your password",
+      html: `<p>Your request for reset password</p>
+              <h3>Click this <a href="http://localhost:3000/reset/${token}">link</a> to reset password</h3>`,
+    };
+    sgMail
+      .send(msg)
+      .then(() => {
+        console.log("Email sent");
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+  });
+  res.status(200).json({ message: "Email has been sent" });
 });
 
 module.exports = router;
