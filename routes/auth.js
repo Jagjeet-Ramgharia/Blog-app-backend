@@ -1,17 +1,9 @@
 const router = require("express").Router();
 const User = require("../models/Users");
 const bcrypt = require("bcrypt");
+const sgMail = require("@sendgrid/mail");
 const nodemailer = require("nodemailer");
-const sendgridTransport = require("nodemailer-sendgrid-transport");
-
-const transporter = nodemailer.createTransport(
-  sendgridTransport({
-    auth: {
-      api_key:
-        "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",
-    },
-  })
-);
+const sendgrid = require("nodemailer-sendgrid-transport");
 
 //Register a user
 router.post("/register", async (req, res) => {
@@ -25,22 +17,24 @@ router.post("/register", async (req, res) => {
       about: req.body.about,
     });
     const savedUser = await newUser.save();
-    try {
-      transporter.sendMail(
-        {
-          to: savedUser.email,
-          from: "no-reply@blogster.com",
-          subject: "Successfull Sign-in",
-          html: "<h1>Welcome to Blogster.com</h1>",
-        },
-        (err) => {
-          console.log("nodemailer error " + err);
-        }
-      );
-    } catch (err) {
-      console.log(err.message);
-    }
     res.status(201).json(savedUser);
+    sgMail.setApiKey(
+      "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"
+    );
+    const msg = {
+      to: savedUser.email,
+      from: "ramghariajagjeet4281@gmail.com",
+      subject: "Successfull Sign Up",
+      text: "Welcome to the Blogster.com",
+    };
+    sgMail
+      .send(msg)
+      .then(() => {
+        console.log("Email sent");
+      })
+      .catch((error) => {
+        console.error(error);
+      });
   } catch (err) {
     res.status(500).json(err);
   }

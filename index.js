@@ -9,10 +9,13 @@ const catRouter = require("./routes/categories");
 const multer = require("multer");
 const cors = require("cors");
 const path = require("path/posix");
+const bodyParser = require("body-parser");
 const port = process.env.PORT || 8000;
 
 //middlewares
 dotenv.config();
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
 app.use(express.json());
 app.use(cors());
 app.use("/images", express.static(path.join(__dirname, "/images")));
