@@ -3,12 +3,19 @@ const User = require("../models/Users");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
+const { OAuth2Client } = require("google-auth-library");
 const {
   userValidationResult,
   userValidator,
   resetPasswordValidation,
   loginValidation,
 } = require("../validators/uservalidator");
+const { response } = require("express");
+const Users = require("../models/Users");
+
+const Oauth = new OAuth2Client(
+  "209714154059-5ejf39rh7rn65mng1pspmijksuagtn5f.apps.googleusercontent.com"
+);
 
 //Register a user
 router.post(
@@ -193,6 +200,45 @@ router.post("/new-password", async (req, res) => {
       }
     });
     smtpTransporter.close();
+  } catch (err) {
+    console.log(err);
+  }
+});
+
+router.post("/google-login", async (req, res) => {
+  try {
+    const { tokenId } = req.body;
+    const response = await Oauth.verifyIdToken({
+      idToken: tokenId,
+      audience:
+        "209714154059-5ejf39rh7rn65mng1pspmijksuagtn5f.apps.googleusercontent.com",
+    });
+    // console.log(response.payload);
+    try {
+      const { email_verified, email, name, picture } = response.payload;
+      if (email_verified) {
+        const user = await User.findOne({ email });
+        if (user) {
+          return res.status(422).json({ message: "User alredy exist" });
+        } else {
+          const defaultPassword = email;
+          const salt = await bcrypt.genSalt(10);
+          const password = await bcrypt.hash(defaultPassword, salt);
+          const newUser = new User({
+            username: name,
+            email,
+            password,
+            profilePic: picture,
+          });
+          const saveUser = await newUser.save();
+          res.status(201).json({ message: "Success", user: saveUser });
+        }
+      } else {
+        res.status(422).json({ error: "Please verify your email" });
+      }
+    } catch (err) {
+      console.log(err);
+    }
   } catch (err) {
     console.log(err);
   }
