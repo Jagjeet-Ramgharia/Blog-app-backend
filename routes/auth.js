@@ -4,6 +4,7 @@ const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const { OAuth2Client } = require("google-auth-library");
+const jwt = require("jsonwebtoken");
 const {
   userValidationResult,
   userValidator,
@@ -24,16 +25,28 @@ router.post(
   userValidationResult,
   async (req, res) => {
     try {
-      const salt = await bcrypt.genSalt(10);
-      const SecuredPwd = await bcrypt.hash(req.body.password, salt);
-      const newUser = new User({
-        username: req.body.username,
-        email: req.body.email,
-        password: SecuredPwd,
-        about: req.body.about,
-      });
-      const savedUser = await newUser.save();
-      res.status(201).json(savedUser);
+      // const salt = await bcrypt.genSalt(10);
+      // const SecuredPwd = await bcrypt.hash(req.body.password, salt);
+      // const newUser = new User({
+      //   username: req.body.username,
+      //   email: req.body.email,
+      //   password: SecuredPwd,
+      //   about: req.body.about,
+      // });
+      // const savedUser = await newUser.save();
+      // res.status(201).json(savedUser);
+      const { email, username, password, about } = req.body;
+      const user = await User.findOne({ email });
+      if (user) {
+        return res
+          .status(400)
+          .json({ message: "User already existed with that email." });
+      }
+      const token = jwt.sign(
+        { email, username, password, about },
+        process.env.SECREATE_KEY,
+        { expiresIn: "10m" }
+      );
       const smtpTransporter = nodemailer.createTransport({
         service: "Gmail",
         port: 465,
@@ -44,13 +57,12 @@ router.post(
       });
       const msg = {
         from: process.env.GMAIL_USER,
-        to: newUser.email,
-        subject: "Successful Sign Up",
+        to: email,
+        subject: "Account activation",
         html: `<h1>Welcome to Bloster App</h>
-             <h3>Username : ${newUser.username},</h3>
-             <h3>Email : ${newUser.email}</h3> 
+              <a href=http://localhost:3000/authentication/activate/${token}>Click this link to activate your account</a>
              <hr/>
-             <p>By signing up, you agree to our Terms , Data Policy and Cookies Policy .</p>`,
+             <p style="font-size=12px">By signing up, you agree to our Terms , Data Policy and Cookies Policy .</p>`,
       };
 
       smtpTransporter.sendMail(msg, (err, response) => {
@@ -61,6 +73,9 @@ router.post(
         }
       });
       smtpTransporter.close();
+      res
+        .status(200)
+        .json({ message: "Email has been sent,Kindly verify your account" });
       // sgMail.setApiKey(process.env.SENDGRID_KEY);
       // const msg = {
       //   to: savedUser.email,
@@ -82,6 +97,72 @@ router.post(
   }
 );
 
+//verify account
+router.post("/verify-account", async (req, res) => {
+  const { token } = req.body;
+  if (token) {
+    jwt.verify(token, process.env.SECREATE_KEY, async (err, decodedToken) => {
+      if (err) {
+        return res.status(422).json({ error: "Activation Link expired" });
+      }
+      const { email, username, password, about } = decodedToken;
+      User.findOne({ email }).exec(async (err, user) => {
+        if (user) {
+          return res
+            .status(422)
+            .json({ error: "User with this email already exist" });
+        }
+        // const salt = bcrypt.genSalt(10);
+        const SecuredPwd = await bcrypt.hash(password, 10);
+        const newUser = new User({
+          email,
+          password: SecuredPwd,
+          about,
+          username,
+        });
+        newUser.save((err, success) => {
+          if (err) {
+            console.log("Error while activating account" + err);
+            return res
+              .status(401)
+              .json({ err: "Error while activating account" });
+          }
+          res
+            .status(200)
+            .json({ message: "SignUp Successfull", data: success });
+        });
+        const smtpTransporter = nodemailer.createTransport({
+          service: "Gmail",
+          port: 465,
+          auth: {
+            user: process.env.GMAIL_USER,
+            pass: process.env.GMAIL_PASS,
+          },
+        });
+        const msg = {
+          from: process.env.GMAIL_USER,
+          to: newUser.email,
+          subject: "Successful Sign Up",
+          html: `<h1>Welcome to Bloster App</h>
+                 <h3>Username : ${newUser.username},</h3>
+                 <h3>Email : ${newUser.email}</h3> 
+                 <hr/>
+                 <h4>By signing up, you agree to our Terms , Data Policy and Cookies Policy .</h4>`,
+        };
+
+        smtpTransporter.sendMail(msg, (err, response) => {
+          if (err) {
+            console.log(err);
+          } else {
+            console.log("Email sent");
+          }
+        });
+        smtpTransporter.close();
+      });
+    });
+  }
+});
+
 //Login
 
 router.post(
@@ -94,8 +175,16 @@ router.post(
       !user && res.status(400).json("Invalid Username and Password");
       const validate = await bcrypt.compare(req.body.password, user.password);
       !validate && res.status(400).json("Invalid Username and Password");
+      const AccessToken = jwt.sign(
+        { id: user._id, isAdmin: user.isAdmin },
+        process.env.SECREATE_KEY,
+        { expiresIn: "1d" }
+      );
       const { password, ...data } = user._doc;
-      res.status(200).json(data);
+      res.status(200).json({
+        user: data,
+        AccessToken: AccessToken,
+      });
     } catch (err) {
       res.status(500).json(err);
     }
@@ -215,7 +304,7 @@ router.post("/google-login", async (req, res) => {
     });
     // console.log(response.payload);
     try {
-      const { email_verified, email, name, picture } = response.payload;
+      const { email_verified, email, name } = response.payload;
       if (email_verified) {
         const user = await User.findOne({ email });
         if (user) {
@@ -228,10 +317,36 @@ router.post("/google-login", async (req, res) => {
             username: name,
             email,
             password,
-            profilePic: picture,
           });
           const saveUser = await newUser.save();
           res.status(201).json({ message: "Success", user: saveUser });
+          const smtpTransporter = nodemailer.createTransport({
+            service: "Gmail",
+            port: 465,
+            auth: {
+              user: process.env.GMAIL_USER,
+              pass: process.env.GMAIL_PASS,
+            },
+          });
+          const msg = {
+            from: process.env.GMAIL_USER,
+            to: newUser.email,
+            subject: "Successful Sign Up",
+            html: `<h1>Welcome to Bloster App</h>
+                 <h3>Username : ${newUser.username},</h3>
+                 <h3>Email : ${newUser.email}</h3> 
+                 <hr/>
+                 <h4>By signing up, you agree to our Terms , Data Policy and Cookies Policy .</h4>`,
+          };
+
+          smtpTransporter.sendMail(msg, (err, response) => {
+            if (err) {
+              console.log(err);
+            } else {
+              console.log("Email sent");
+            }
+          });
+          smtpTransporter.close();
         }
       } else {
         res.status(422).json({ error: "Please verify your email" });

@@ -1,10 +1,11 @@
 const router = require("express").Router();
 const User = require("../models/Users");
 const Post = require("../models/Post");
+const verify = require("../verifyToken");
 
 //create a post
 
-router.post("/", async (req, res) => {
+router.post("/", verify, async (req, res) => {
   try {
     const newPost = new Post(req.body);
     const savePost = await newPost.save();
@@ -15,7 +16,7 @@ router.post("/", async (req, res) => {
 });
 
 //update a post
-router.put("/:id", async (req, res) => {
+router.put("/:id", verify, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
     if (post.username === req.body.username) {
@@ -42,7 +43,7 @@ router.put("/:id", async (req, res) => {
 });
 
 //delete a post
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", verify, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
     if (post.username === req.body.username) {
@@ -62,7 +63,7 @@ router.delete("/:id", async (req, res) => {
 
 //get a post
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", verify, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
     res.status(200).json(post);
@@ -73,13 +74,15 @@ router.get("/:id", async (req, res) => {
 
 //get all post
 
-router.get("/", async (req, res) => {
+router.get("/", verify, async (req, res) => {
   const username = req.query.user;
   const catName = req.query.cat;
   try {
     let posts;
     if (username) {
-      posts = await Post.find({ username });
+      posts = await Post.find({ username }, (err) => {
+        console.log(err);
+      });
     } else if (catName) {
       posts = await Post.find({
         categories: {

@@ -2,10 +2,14 @@ const router = require("express").Router();
 const User = require("../models/Users");
 const Post = require("../models/Post");
 const bcrypt = require("bcrypt");
+const verify = require("../verifyToken");
 
 //Update user
-router.put("/:id", async (req, res) => {
+router.put("/:id", verify, async (req, res) => {
   if (req.body.userId === req.params.id) {
+    const authHeader = req.headers.token;
+    console.log(authHeader);
+    const token = authHeader.split(" ")[1].toString();
     if (req.body.password) {
       const salt = await bcrypt.genSalt(10);
       req.body.password = await bcrypt.hash(req.body.password, salt);
@@ -18,7 +22,10 @@ router.put("/:id", async (req, res) => {
         },
         { new: true }
       );
-      res.status(200).json(updateUser);
+      res.status(200).json({
+        user: updateUser,
+        AccessToken: token,
+      });
     } catch (err) {
       console.log(err);
     }
@@ -28,7 +35,7 @@ router.put("/:id", async (req, res) => {
 });
 
 //delete a user
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", verify, async (req, res) => {
   if ((req.body.id = req.params.id)) {
     try {
       const user = await User.findById(req.params.id);
@@ -47,7 +54,7 @@ router.delete("/:id", async (req, res) => {
 
 //get a user
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", verify, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     const { password, ...others } = user._doc;
